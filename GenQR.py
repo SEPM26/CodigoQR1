@@ -21,7 +21,4 @@ while con <= 1239:
     # Aumentamos con
     con = con + 1
 
-# url = 'https://www.youtube.com/c/AprendeeIngenia/videos'
-# url = pyqrcode.create(url, error = 'L')
-# url.png('URL' + '.png', scale = 6)
 
