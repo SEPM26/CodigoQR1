@@ -1,9 +1,8 @@
+import threading
 import cv2
-import pyqrcode
-import png
 from datetime import datetime
-from pyzbar.pyzbar import decode
 import numpy as np
+from pyzbar.pyzbar import decode
 import openpyxl as xl
 
 hora_categorias = {
@@ -13,9 +12,13 @@ hora_categorias = {
 }
 
 cap = cv2.VideoCapture(0)
-mañana = set()  # Usamos un conjunto para evitar duplicados
+mañana = set()
 tarde = set()
 noche = set()
+
+# Define a semaphore with an initial value
+semaphore = threading.Semaphore(1)  # Set the initial value to 1
+
 
 def infhora():
     inf = datetime.now()
@@ -23,14 +26,18 @@ def infhora():
     hora = inf.strftime('%H:%M:%S')
     return hora, fecha
 
+
 def crear_archivo_excel(hora_categorias):
     wb = xl.Workbook()
     for categoria in hora_categorias:
-        hoja = wb.create_sheet(categoria)
+        wb.create_sheet(categoria)
     wb.save('RegistroQR.xlsx')
+
 
 def inicializar_semaforo():
     crear_archivo_excel(hora_categorias)
+    print("Semaphore initialized.")
+
 
 def obtener_categoria_hora(hora):
     for categoria, rango in hora_categorias.items():
@@ -38,24 +45,36 @@ def obtener_categoria_hora(hora):
             return categoria
     return "Noche"
 
+
 def actualizar_semaforo_excel(codigo, categoria):
-    wb = xl.load_workbook('RegistroQR.xlsx')
-    hoja = wb[categoria]
+    with semaphore:
+        print(f"Thread {threading.current_thread().name} acquired the semaphore.")
+        wb = xl.load_workbook('RegistroQR.xlsx')
 
-    # Verificar si el código ya ha sido registrado
-    if codigo not in mañana and codigo not in tarde and codigo not in noche:
-        # Agregar a la lista correspondiente
-        if categoria == "Mañana":
-            mañana.add(codigo)
-        elif categoria == "Tarde":
-            tarde.add(codigo)
-        elif categoria == "Noche":
-            noche.add(codigo)
+        # Check if the worksheet exists, create it if not
+        if categoria not in wb.sheetnames:
+            wb.create_sheet(categoria)
 
-        # Agregar a la hoja de Excel
-        hoja.append([codigo, infhora()[0]])
+        hoja = wb[categoria]
 
-    wb.save('RegistroQR.xlsx')
+        # Verificar si el código ya ha sido registrado
+        if codigo not in mañana and codigo not in tarde and codigo not in noche:
+            # Agregar a la lista correspondiente
+            if categoria == "Mañana":
+                mañana.add(codigo)
+            elif categoria == "Tarde":
+                tarde.add(codigo)
+            elif categoria == "Noche":
+                noche.add(codigo)
+
+            # Agregar a la hoja de Excel
+            hoja.append([codigo, infhora()[0]])
+
+            print(f"Added information to Excel: {codigo} in {categoria}")
+
+        print(f"Thread {threading.current_thread().name} released the semaphore.")
+        wb.save('RegistroQR.xlsx')
+
 
 # Empezamos
 inicializar_semaforo()
@@ -98,5 +117,4 @@ while True:
 
 cv2.destroyAllWindows()
 cap.release()
-
 
