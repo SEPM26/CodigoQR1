@@ -4,6 +4,9 @@ from datetime import datetime
 import numpy as np
 from pyzbar.pyzbar import decode
 import openpyxl as xl
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 hora_categorias = {
     "Mañana": {"inicio": 6, "fin": 12},
@@ -18,6 +21,45 @@ noche = set()
 
 # Define a semaphore with an initial value
 semaphore = threading.Semaphore(1)  # Set the initial value to 1
+
+# Configuración del servidor SMTP para enviar correos electrónicos
+SMTP_SERVER = 'smtp.example.com'
+SMTP_PORT = 587
+SMTP_USERNAME = 'your_username'
+SMTP_PASSWORD = 'your_password'
+SENDER_EMAIL = 'your_email@example.com'
+RECIPIENT_EMAIL = 'recipient@example.com'
+
+# Tiempo límite de inactividad en segundos (por ejemplo, 5 minutos)
+TIEMPO_INACTIVIDAD = 300
+ultimo_escaneo = datetime.now()
+
+
+def enviar_correo():
+    msg = MIMEMultipart()
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = RECIPIENT_EMAIL
+    msg['Subject'] = 'Alerta de Inactividad'
+    body = 'Se detectó inactividad del empleado.'
+    msg.attach(MIMEText(body, 'plain'))
+
+    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+    server.starttls()
+    server.login(SMTP_USERNAME, SMTP_PASSWORD)
+    text = msg.as_string()
+    server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, text)
+    server.quit()
+
+
+def monitor():
+    global ultimo_escaneo
+    while True:
+        tiempo_transcurrido = (datetime.now() - ultimo_escaneo).total_seconds()
+        if tiempo_transcurrido >= TIEMPO_INACTIVIDAD:
+            enviar_correo()
+            ultimo_escaneo = datetime.now()
+        # Espera un intervalo antes de volver a verificar
+        threading.Event().wait(60)  # Verifica cada minuto
 
 
 def infhora():
@@ -79,6 +121,10 @@ def actualizar_semaforo_excel(codigo, categoria):
 # Empezamos
 inicializar_semaforo()
 
+# Iniciar el hilo de monitoreo de inactividad
+thread_monitor = threading.Thread(target=monitor)
+thread_monitor.start()
+
 while True:
     ret, frame = cap.read()
 
@@ -109,6 +155,9 @@ while True:
 
         cv2.putText(frame, letr + '0' + str(num), (xi, yi - 15), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 55, 0), 2)
 
+        # Actualizar el tiempo del último escaneo
+        ultimo_escaneo = datetime.now()
+
     cv2.imshow(" LECTOR DE QR", frame)
 
     t = cv2.waitKey(5)
@@ -117,4 +166,5 @@ while True:
 
 cv2.destroyAllWindows()
 cap.release()
+
 
